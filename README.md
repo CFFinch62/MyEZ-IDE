@@ -56,7 +56,7 @@ EZ IDE is a full-featured integrated development environment built with Python a
 
 ### Prerequisites
 - **Python 3.8** or higher
-- **EZ language** installed and available in PATH (for running EZ files)
+- **EZ language** https://github.com/SchoolyB/EZ installed and available in PATH (for running EZ files)
 
 ### Quick Setup
 
