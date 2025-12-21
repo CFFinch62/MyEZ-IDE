@@ -7,6 +7,7 @@ import os
 import sys
 import subprocess
 import shutil
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -26,32 +27,96 @@ from app.themes import Theme
 
 
 class TerminalOutput(QPlainTextEdit):
-    """Terminal output display widget"""
+    """Terminal output display widget with ANSI escape code support"""
+    
+    # ANSI color code mappings (standard 16 colors)
+    ANSI_COLORS = {
+        '30': '#000000',  # Black
+        '31': '#CD0000',  # Red
+        '32': '#00CD00',  # Green
+        '33': '#CDCD00',  # Yellow
+        '34': '#0000EE',  # Blue
+        '35': '#CD00CD',  # Magenta
+        '36': '#00CDCD',  # Cyan
+        '37': '#E5E5E5',  # White
+        '90': '#7F7F7F',  # Bright Black (Gray)
+        '91': '#FF0000',  # Bright Red
+        '92': '#00FF00',  # Bright Green
+        '93': '#FFFF00',  # Bright Yellow
+        '94': '#5C5CFF',  # Bright Blue
+        '95': '#FF00FF',  # Bright Magenta
+        '96': '#00FFFF',  # Bright Cyan
+        '97': '#FFFFFF',  # Bright White
+    }
+    
+    # Regex to match ANSI escape sequences
+    ANSI_ESCAPE_RE = re.compile(r'\x1b\[([0-9;]*)m')
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setReadOnly(True)
         self.setMaximumBlockCount(10000)  # Limit scrollback
         self._default_format = QTextCharFormat()
+        self._current_format = QTextCharFormat()
     
     def append_output(self, text: str, color: QColor = None):
-        """Append text to the terminal output"""
+        """Append text to the terminal output, parsing ANSI codes"""
         cursor = self.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         
         if color:
+            # Direct color override - don't parse ANSI
             fmt = QTextCharFormat()
             fmt.setForeground(color)
             cursor.insertText(text, fmt)
         else:
-            cursor.insertText(text, self._default_format)
+            # Parse ANSI escape codes
+            self._append_with_ansi(cursor, text)
         
         self.setTextCursor(cursor)
         self.ensureCursorVisible()
     
+    def _append_with_ansi(self, cursor: QTextCursor, text: str):
+        """Parse and render text with ANSI escape codes"""
+        pos = 0
+        for match in self.ANSI_ESCAPE_RE.finditer(text):
+            # Insert text before this escape sequence
+            if match.start() > pos:
+                cursor.insertText(text[pos:match.start()], self._current_format)
+            
+            # Process the escape sequence
+            codes = match.group(1).split(';') if match.group(1) else ['0']
+            self._process_ansi_codes(codes)
+            
+            pos = match.end()
+        
+        # Insert remaining text after last escape sequence
+        if pos < len(text):
+            cursor.insertText(text[pos:], self._current_format)
+    
+    def _process_ansi_codes(self, codes: list):
+        """Process ANSI SGR (Select Graphic Rendition) codes"""
+        for code in codes:
+            if code == '0' or code == '':
+                # Reset to default
+                self._current_format = QTextCharFormat(self._default_format)
+            elif code == '1':
+                # Bold
+                self._current_format.setFontWeight(700)
+            elif code == '3':
+                # Italic
+                self._current_format.setFontItalic(True)
+            elif code == '4':
+                # Underline
+                self._current_format.setFontUnderline(True)
+            elif code in self.ANSI_COLORS:
+                # Foreground color
+                self._current_format.setForeground(QColor(self.ANSI_COLORS[code]))
+    
     def set_default_color(self, color: QColor):
         """Set the default text color"""
         self._default_format.setForeground(color)
+        self._current_format = QTextCharFormat(self._default_format)
 
 
 class TerminalInput(QLineEdit):

@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QSplitter, QHeaderView, QAbstractItemView, QToolBar, QComboBox
 )
 from PyQt6.QtCore import (
-    Qt, QDir, QModelIndex, pyqtSignal, QFileInfo, QSize, QMimeData
+    Qt, QDir, QModelIndex, pyqtSignal, QFileInfo, QSize, QMimeData, QTimer
 )
 from PyQt6.QtGui import (
     QIcon, QAction, QKeySequence, QFileSystemModel,
@@ -122,6 +122,12 @@ class FileBrowserWidget(QWidget):
         self.settings = settings
         self.current_root = ""
         
+        # Timer for distinguishing single vs double clicks
+        self._click_timer = QTimer(self)
+        self._click_timer.setSingleShot(True)
+        self._click_timer.timeout.connect(self._on_single_click_timeout)
+        self._pending_click_index = None
+        
         self._setup_ui()
         self._setup_connections()
         self._load_initial_directory()
@@ -174,6 +180,13 @@ class FileBrowserWidget(QWidget):
         self.new_folder_btn.setText("+📁")
         self.new_folder_btn.setToolTip("New Folder")
         self.toolbar.addWidget(self.new_folder_btn)
+        
+        self.toolbar.addSeparator()
+        
+        self.bookmark_btn = QToolButton()
+        self.bookmark_btn.setText("⭐")
+        self.bookmark_btn.setToolTip("Bookmark Current Folder")
+        self.toolbar.addWidget(self.bookmark_btn)
         
         layout.addWidget(self.toolbar)
         
@@ -250,6 +263,7 @@ class FileBrowserWidget(QWidget):
     
     def _setup_connections(self):
         """Set up signal connections"""
+        self.tree.clicked.connect(self._on_item_clicked)
         self.tree.doubleClicked.connect(self._on_item_double_clicked)
         self.tree.customContextMenuRequested.connect(self._show_context_menu)
         
@@ -262,6 +276,7 @@ class FileBrowserWidget(QWidget):
         self.refresh_btn.clicked.connect(self._refresh)
         self.new_file_btn.clicked.connect(self._create_new_file)
         self.new_folder_btn.clicked.connect(self._create_new_folder)
+        self.bookmark_btn.clicked.connect(self._bookmark_current_folder)
         
         self.hidden_toggle.toggled.connect(self._toggle_hidden_files)
         
@@ -321,8 +336,33 @@ class FileBrowserWidget(QWidget):
         
         self.folder_changed.emit(path)
     
+    def _on_item_clicked(self, index: QModelIndex):
+        """Handle click on item - delay to check for double-click"""
+        path = self.model.filePath(index)
+        if os.path.isdir(path):
+            # Store the index and start timer - if double-click comes, timer is cancelled
+            self._pending_click_index = index
+            self._click_timer.start(250)  # 250ms delay to wait for potential double-click
+    
+    def _on_single_click_timeout(self):
+        """Called when single-click timer expires (no double-click detected)"""
+        if self._pending_click_index is not None:
+            index = self._pending_click_index
+            self._pending_click_index = None
+            path = self.model.filePath(index)
+            if os.path.isdir(path):
+                # Toggle expand/collapse for folders
+                if self.tree.isExpanded(index):
+                    self.tree.collapse(index)
+                else:
+                    self.tree.expand(index)
+    
     def _on_item_double_clicked(self, index: QModelIndex):
         """Handle double-click on item"""
+        # Cancel any pending single-click action
+        self._click_timer.stop()
+        self._pending_click_index = None
+        
         path = self.model.filePath(index)
         if os.path.isdir(path):
             self.navigate_to(path)
@@ -362,6 +402,11 @@ class FileBrowserWidget(QWidget):
     def _go_home(self):
         """Navigate to home directory"""
         self.navigate_to(str(Path.home()))
+    
+    def _bookmark_current_folder(self):
+        """Add the current folder to bookmarks"""
+        if self.current_root:
+            self.bookmarks.add_bookmark(self.current_root)
     
     def _refresh(self):
         """Refresh the current directory"""
