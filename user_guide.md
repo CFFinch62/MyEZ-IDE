@@ -370,6 +370,9 @@ The REPL debugger is a fallback with limited features:
 - **No call stack**: Limited function call information
 - **Slower**: Parses and sends statements individually
 - **Relative imports**: May not work with relative imports
+- **Function order**: All functions must be defined **before** `main()` or they won't be available during debugging
+
+> **Important**: When using the REPL debugger, always define your functions before the `main()` procedure. The debugger sends function definitions first, then steps through `main()`. If functions are defined after `main()`, they won't exist when `main()` tries to call them.
 
 ### Debug Workflow Example
 
