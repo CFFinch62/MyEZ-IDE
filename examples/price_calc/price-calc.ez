@@ -10,7 +10,7 @@
  
  // Given Price and Cost, calculate the rest
 
-import @std
+import @std, @os
 import "./display"
 import "./input"
 import "./validate"
@@ -140,4 +140,15 @@ do calculate(choice1, choice2 int, val1, val2 float) -> (float, float, float, fl
     }
     
     return price, margin, profit, markup, cost
+}
+
+do clear_screen() {
+    temp platform string = os.platform()
+    if platform == "darwin" {
+        temp exitCode, err = os.exec("clear")
+    } or platform == "linux" {
+        temp exitCode, err = os.exec("clear")
+    } otherwise {
+        temp exitCode, err = os.exec("cls")
+    }
 }

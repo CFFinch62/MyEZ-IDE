@@ -35,6 +35,7 @@ class GoDebugSession(QObject):
         self.working_dir = ""
         self.current_line = 0
         self._supports_step = True
+        self.is_running = False
 
     def supports_step(self) -> bool:
         """Returns True - native debugger always supports stepping"""
@@ -61,6 +62,7 @@ class GoDebugSession(QObject):
         ez_path = self._get_ez_interpreter()
         if not ez_path:
             self.error_received.emit("EZ interpreter not found. Please configure it in Run → Select EZ Interpreter")
+            self.is_running = False
             return False
 
         self.filepath = filepath
@@ -81,6 +83,7 @@ class GoDebugSession(QObject):
 
         if not self.process.waitForStarted(3000):
             self.error_received.emit("Failed to start debugger")
+            self.is_running = False
             return False
 
         # Send initialize command
@@ -89,6 +92,7 @@ class GoDebugSession(QObject):
             'workingDir': self.working_dir
         })
 
+        self.is_running = True
         self.session_started.emit()
         return True
 
@@ -138,6 +142,7 @@ class GoDebugSession(QObject):
             if self.process.state() == QProcess.ProcessState.Running:
                 self.process.kill()
             self.process = None
+        self.is_running = False
         self.session_ended.emit()
 
     def _send_command(self, command: str, params: Dict):
@@ -163,6 +168,7 @@ class GoDebugSession(QObject):
 
         # Process line-delimited JSON
         for line in data.strip().split('\n'):
+            line = line.strip()
             if not line:
                 continue
 
@@ -170,7 +176,8 @@ class GoDebugSession(QObject):
                 message = json.loads(line)
                 self._handle_event(message)
             except json.JSONDecodeError as e:
-                self.error_received.emit(f"Invalid JSON from debugger: {e}")
+                # Only emit error for non-empty lines that aren't valid JSON
+                self.error_received.emit(f"[ERROR] Invalid JSON from debugger: {e}")
 
     def _handle_stderr(self):
         """Handle stderr from the debugger"""
@@ -179,7 +186,8 @@ class GoDebugSession(QObject):
 
         data = self.process.readAllStandardError().data().decode('utf-8', errors='replace')
         if data.strip():
-            self.error_received.emit(data.strip())
+            # Program output goes to stderr, so send it to output panel
+            self.output_received.emit(data.strip())
 
     def _handle_event(self, message: Dict):
         """Process an event message from the debugger"""
@@ -270,6 +278,7 @@ class GoDebugSession(QObject):
 
     def _handle_finished(self, exit_code, exit_status):
         """Handle process finished"""
+        self.is_running = False
         self.session_ended.emit()
 
     def _handle_error(self, error):
@@ -284,4 +293,5 @@ class GoDebugSession(QObject):
 
         msg = error_messages.get(error, f"Unknown error: {error}")
         self.error_received.emit(msg)
+        self.is_running = False
         self.session_ended.emit()
