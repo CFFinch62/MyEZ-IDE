@@ -19,6 +19,10 @@
 
 ---
 
+<p align="center">
+  <img src="images/EzIDEScreenshot.png" alt="EZ IDE Screenshot" width="800">
+</p>
+
 EZ IDE is a full-featured integrated development environment built with Python and PyQt6, specifically designed for developing applications in the EZ programming language. It provides a modern, customizable interface with built-in syntax highlighting, an integrated terminal, file browser, and extensive theming support.
 
 ## Features
